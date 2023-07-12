@@ -1,2 +1,2 @@
 # bitrise-yml
-Storing bitrise.yml for multiple projects
+Storing bitrise.yml for multiple projects. Change.
