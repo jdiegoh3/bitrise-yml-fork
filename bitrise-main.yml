@@ -1,0 +1,1234 @@
+---
+format_version: '11'
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: other
+trigger_map:
+- push_branch: "*"
+  workflow: primary
+- pull_request_source_branch: "*"
+  workflow: git-pre-merge
+workflows:
+  android-sdk:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            sdkmanager --list
+            sdkmanager "platforms;android-33"
+            sdkmanager "build-tools;33.0.2"
+            sdkmanager "system-images;android-33;google_apis;arm64-v8a"
+            sdkmanager --list
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.3.x-ventura
+        machine_type_id: g2-m1.8core
+  brew-repo:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+
+            echo 'class SonarScanner < Formula' >> sonar-scanner.rb
+            echo '  desc "Launcher to analyze a project with SonarQube"' >> sonar-scanner.rb
+            echo '  homepage "https://docs.sonarqube.org/latest/analysis/scan/sonarscanner/"' >> sonar-scanner.rb
+            echo '  url "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856.zip"' >> sonar-scanner.rb
+            echo '  sha256 "642d3e189bcca51055bc17d349fc575bf6259df1b54f4077a9a6c586afd65bff"' >> sonar-scanner.rb
+            echo '  license "LGPL-3.0-or-later"' >> sonar-scanner.rb
+            echo '  head "https://github.com/SonarSource/sonar-scanner-cli.git", branch: "master"' >> sonar-scanner.rb
+            echo '  bottle do' >> sonar-scanner.rb
+            echo '    sha256 cellar: :any_skip_relocation, all: "2afdbf58216d9c6e1dc8138fbaae51ac5945bc9e86f8520d70acf710df97e536"' >> sonar-scanner.rb
+            echo '  end' >> sonar-scanner.rb
+            echo '  def install' >> sonar-scanner.rb
+            echo '    rm_rf Dir["bin/*.bat"]' >> sonar-scanner.rb
+            echo '    libexec.install Dir["*"]' >> sonar-scanner.rb
+            echo '    bin.install libexec/"bin/sonar-scanner"' >> sonar-scanner.rb
+            echo '    etc.install libexec/"conf/sonar-scanner.properties"' >> sonar-scanner.rb
+            echo '    ln_s etc/"sonar-scanner.properties", libexec/"conf/sonar-scanner.properties"' >> sonar-scanner.rb
+            echo '    bin.env_script_all_files libexec/"bin/", SONAR_SCANNER_HOME: libexec' >> sonar-scanner.rb
+            echo '  end' >> sonar-scanner.rb
+            echo '  test do' >> sonar-scanner.rb
+            echo '    assert_match version.to_s, shell_output("#{bin}/sonar-scanner --version")' >> sonar-scanner.rb
+            echo '  end' >> sonar-scanner.rb
+            echo 'end' >> sonar-scanner.rb
+
+            cat sonar-scanner.rb
+            cp sonar-scanner.rb $(brew --repository)/Library/Taps/homebrew/homebrew-core/Formula/sonar-scanner.rb
+            cat $(brew --repository)/Library/Taps/homebrew/homebrew-core/Formula/sonar-scanner.rb
+
+            curl https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856.zip --output sonar.zip
+            unzip sonar.zip
+
+            #jenv versions
+            #jenv global 11.0
+            #export JAVA_HOME="$(jenv prefix)"
+            #envman add --key JAVA_HOME --value "$(jenv prefix)"
+    - brew-install@0:
+        inputs:
+        - packages: sonar-scanner
+        title: Brew install sonar-scanner
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            echo $JAVA_HOME
+            # ls /Users/vagrant/.jenv/versions/11.0/bin
+            which java
+            #echo $PATH
+            #export PATH="/Users/vagrant/.jenv/shims/java:$PATH"
+            which sonar-scanner
+            cat /usr/local/bin/sonar-scanner
+            cat /usr/local/Cellar/sonar-scanner/4.8.0.2856/libexec/bin/sonar-scanner
+            # ls /usr/local/opt/openjdk@11
+
+            echo '#!/bin/bash' >> sonar-scanner
+            echo 'SONAR_SCANNER_HOME="/usr/local/Cellar/sonar-scanner/4.8.0.2856/libexec" exec "/usr/local/Cellar/sonar-scanner/4.8.0.2856/libexec/bin/sonar-scanner"  "$@"' >> sonar-scanner
+
+            sudo cp sonar-scanner /usr/local/bin/sonar-scanner
+
+            sonar-scanner --version
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.2.x-ventura
+        machine_type_id: g2.4core
+  brew-sonar:
+    steps:
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - content: "#!/usr/bin/env bash\n# fail if any commands fails\nset -e\n# make
+            pipelines' return status equal the last command to exit with a non-zero
+            status, or zero if all commands exit successfully\nset -o pipefail\n#
+            debug log\nset -x\n\n\n# This portion of the code allows to bypass the
+            cache in brew \n# cd \"$(brew --repository)/Library/Taps/homebrew/homebrew-core\"\n#
+            git remote -v\n# git remote set-url origin https://github.com/Homebrew/homebrew-core.git\n#
+            cd \"$(brew --repository)/Library/Taps/homebrew/homebrew-cask\"\n# git
+            remote set-url origin https://github.com/Homebrew/homebrew-cask.git\n\n#
+            brew tap\n# brew tap \"homebrew/bundle\"\n\n# brew install sonar-scanner\n\necho
+            'brew \"swiftlint\"' >> Brewfile\necho 'brew \"sonar-scanner\"' >> Brewfile\n#
+            brew bundle\n\n# or run a script from your repository, like:\n# bash ./path/to/script.sh\n#
+            not just bash, e.g.:\n# ruby ./path/to/script.rb"
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+
+            cwd=$(pwd)
+
+            # This portion of the code allows to bypass the cache in brew
+            cd "$(brew --repository)/Library/Taps/homebrew/homebrew-core"
+            git remote set-url origin https://github.com/Homebrew/homebrew-core.git
+            cd "$(brew --repository)/Library/Taps/homebrew/homebrew-cask"
+            git remote set-url origin https://github.com/Homebrew/homebrew-cask.git
+
+            cd $cwd
+            brew update
+
+            # brew install sonar-scanner
+            brew bundle install
+            # brew install sonar-scanner
+
+            brew "reinstall" "sonar-scanner"
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.2.x-ventura
+        machine_type_id: g2.4core
+  brew-sonar-in-a-step:
+    steps:
+    - brew-install@0:
+        inputs:
+        - packages: sonar-scanner
+        title: Brew install sonar-scanner
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.2.x-ventura
+        machine_type_id: g2.4core
+  cross-cache:
+    steps:
+    - cache-pull@2: {}
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            echo $BITRISE_CACHE_API_URL
+            echo -n "$BITRISE_CACHE_API_URL" | od -A n -t x1 > cache-url.txt
+
+            ls
+
+            # write your script here
+            touch my-cache
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            envman add --key MY_HEX_CACHE --value $(cat cache-url.txt | xargs | tr -d '[:space:]')
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            echo $MY_HEX_CACHE
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - cache-push@2:
+        inputs:
+        - cache_paths: "."
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - deploy_path: "$BITRISE_SOURCE_DIR"
+    - build-router-start@0:
+        inputs:
+        - environment_key_list: MY_HEX_CACHE
+        - access_token: "$BITRISE_TOKEN"
+        - workflows: decode
+    meta:
+      bitrise.io:
+        stack: osx-xcode-13.4.x
+        machine_type_id: g2.12core
+  decode:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            echo $MY_HEX_CACHE
+            envman add --key DECODED --value $(echo -n $MY_HEX_CACHE | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            echo $DECODED
+            # envman add --key BITRISE_CACHE_API_URL --value "$DECODED" --sensitive
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - cache-pull@2:
+        inputs:
+        - ignore_stack_difference: 'true'
+        - is_debug_mode: 'true'
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            ls
+            ls /Users
+            ls /Users/vagrant
+            ls /Users/vagrant/git
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    meta:
+      bitrise.io:
+        stack: linux-docker-android-20.04
+        machine_type_id: standard
+  download:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            echo -n "$BITRISEIO_TEST_FILE_STORAGE_URL" | od -A n -t x1
+
+            curl -o file $BITRISEIO_TEST_FILE_STORAGE_URL
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+  France-troubleshoot:
+    steps:
+    - git-clone@6:
+        inputs:
+        - clone_depth: '100'
+        is_always_run: true
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            du -sh $BITRISE_SOURCE_DIR
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+  git-pre-merge:
+    steps:
+    - activate-ssh-key@4:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@6:
+        is_always_run: true
+    - script@1:
+        title: Do anything with Script step
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            git --no-pager log
+            git rev-parse main
+            git rev-parse main~1
+            git rev-parse origin/test-pr
+            git rev-parse origin/main
+
+            ENV
+    - set-env-var@0:
+        inputs:
+        - destination_keys: ENV_1
+        - value: eflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkad
+    - set-env-var@0:
+        inputs:
+        - destination_keys: ENV_2
+        - value: eflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkadeflelwfjklasjdflkjadhfkjadhflkajdhfkajdhfkjadhflkjdahfkjahdslkfjhadkjfhaldkjfhaldkjfhakdjshfdakjhfkjdahflkajdhflkajdhflkajdhflkajdhflkjadhflkdjahflkjadhflkadjhflkajdhfkajdhflkajdhfalkjdshflkajdhflkad
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_3
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_4
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_5
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_6
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_7
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_8
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_9
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_10
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_11
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_12
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_13
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_14
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_15
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_16
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_17
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_18
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_19
+    - set-env-var@0:
+        inputs:
+        - value: "$ENV_1"
+        - destination_keys: ENV_20
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            ENV
+            ENV >> environment.txt
+            ls -l environment.txt
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+  goks:
+    steps:
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            # git clone "https://$GOKS_USER:$GOKS_PASSWORD@a58c-84-71-82-200.eu.ngrok.io/atanas-bitrise/kubernetes.git"
+            git clone https://github.com/kubernetes/kubernetes.git
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - create-zip@0:
+        inputs:
+        - destination: "$BITRISE_DEPLOY_DIR/kubernetes.zip"
+        - source_path: kubernetes
+    - deploy-to-bitrise-io@2: {}
+    meta:
+      bitrise.io:
+        stack: linux-docker-android-20.04
+        machine_type_id: standard
+  location:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            sdkmanager --list
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - avd-manager@1:
+        inputs:
+        - abi: arm64-v8a
+        - api_level: '30'
+    - wait-for-android-emulator@1: {}
+    - script@1:
+        title: Install telnet
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            sudo apt-get update && apt-get install telnet
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - runner_bin: "/bin/expect"
+        - content: |-
+            #!/usr/bin/expect
+
+            set timeout 1
+            spawn telnet localhost 5554
+            expect_after eof { exit 0 }
+
+            expect OK
+
+            set fp [open "~/.emulator_console_auth_token" r]
+            if {[gets $fp line] != -1} {
+              send "auth $line\r"
+            }
+
+            send "geo fix -71.2230 41.9067\r"
+            expect OK
+            send "exit\r"
+        title: Set coordinates
+    - script@1:
+        title: Check coordinates
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            # adb -s emulator-5554 emu "geo fix 88.3639 22.5726"
+            adb -s emulator-5554 shell dumpsys location > dumpsys.txt
+            cat dumpsys.txt
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # brew info zeromq
+            # bundle exec danger --version
+
+            which ruby
+            ruby -v
+            #asdf list all ruby
+
+            # asdf install ruby 2.6.10
+            # asdf global ruby 2.6.3
+
+            #sudo apt-get install software-properties-common
+            #sudo apt-add-repository -y ppa:rael-gc/rvm
+            #sudo apt-get update
+            #sudo apt-get install rvm
+            #sudo usermod -a -G rvm root
+            #echo 'source "/etc/profile.d/rvm.sh"' >> ~/.zshrc
+            #source ~/.zshrc
+
+            gpg --keyserver keyserver.ubuntu.com --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3 7D2BAF1CF37B13E2069D6956105BD0E739499BDB
+            curl -sSL https://get.rvm.io | bash -s stable
+            echo "source ~/.rvm/scripts/rvm" >> ~/.profile
+            source ~/.profile
+
+            which rvm
+
+            rvm install ruby-2.6.3 --with-openssl-dir=`brew --prefix openssl`
+            rvm --default use 2.6.3
+
+            which ruby
+            ruby -v
+
+            echo "source 'https://rubygems.org'" >> Gemfile
+            echo "gem 'danger', '8.6.1'" >> Gemfile
+            echo "gem 'danger-xcode_summary', '>= 1.2.0'" >> Gemfile
+            echo "gem 'danger-xcodebuild', '>= 0.0.6'" >> Gemfile
+
+            bundle install
+        title: Install Danger
+        run_if: 'false'
+    - script@1:
+        inputs:
+        - content: sleep 600
+        title: Install Danger
+        is_always_run: true
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.2.x-ventura
+        machine_type_id: g2-m1-max.5core
+  location-parallel:
+    steps:
+    - script@1:
+        title: Install NC
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            sudo apt-get update -y
+            sudo apt-get install -y netcat
+    - avd-manager@1: {}
+    - wait-for-android-emulator@1: {}
+    - script@1:
+        title: Expect
+        inputs:
+        - runner_bin: "/bin/expect"
+        - content: |-
+            #!/usr/bin/expect
+
+            set timeout 1
+            spawn nc localhost 5554
+            expect_after eof { exit 0 }
+
+            expect OK
+
+            set fp [open "~/.emulator_console_auth_token" r]
+            if {[gets $fp line] != -1} {
+              send "auth $line\r"
+            }
+
+            send "geo fix -71.2230 41.9067\r"
+            expect OK
+            send "exit\r"
+    - script@1:
+        title: Check coordinates
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            # adb -s emulator-5554 emu "geo fix 88.3639 22.5726"
+            adb -s emulator-5554 shell dumpsys location > dumpsys.txt
+            cat dumpsys.txt
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # brew info zeromq
+            # bundle exec danger --version
+
+            which ruby
+            ruby -v
+            #asdf list all ruby
+
+            # asdf install ruby 2.6.10
+            # asdf global ruby 2.6.3
+
+            #sudo apt-get install software-properties-common
+            #sudo apt-add-repository -y ppa:rael-gc/rvm
+            #sudo apt-get update
+            #sudo apt-get install rvm
+            #sudo usermod -a -G rvm root
+            #echo 'source "/etc/profile.d/rvm.sh"' >> ~/.zshrc
+            #source ~/.zshrc
+
+            gpg --keyserver keyserver.ubuntu.com --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3 7D2BAF1CF37B13E2069D6956105BD0E739499BDB
+            curl -sSL https://get.rvm.io | bash -s stable
+            echo "source ~/.rvm/scripts/rvm" >> ~/.profile
+            source ~/.profile
+
+            which rvm
+
+            rvm install ruby-2.6.3 --with-openssl-dir=`brew --prefix openssl`
+            rvm --default use 2.6.3
+
+            which ruby
+            ruby -v
+
+            echo "source 'https://rubygems.org'" >> Gemfile
+            echo "gem 'danger', '8.6.1'" >> Gemfile
+            echo "gem 'danger-xcode_summary', '>= 1.2.0'" >> Gemfile
+            echo "gem 'danger-xcodebuild', '>= 0.0.6'" >> Gemfile
+
+            bundle install
+        title: Install Danger
+        run_if: 'false'
+    meta:
+      bitrise.io:
+        stack: linux-docker-android-20.04
+        machine_type_id: standard
+  manual-start-emulator:
+    steps:
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - content: |
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            /usr/local/share/android-sdk/cmdline-tools/cmdline-tools/bin/sdkmanager "--verbose" "--channel=0" "emulator"
+            /usr/local/share/android-sdk/cmdline-tools/cmdline-tools/bin/sdkmanager "--verbose" "--channel=0" "system-images;android-28;google_apis;x86_64"
+            /usr/local/share/android-sdk/cmdline-tools/cmdline-tools/bin/avdmanager "--verbose" "create" "avd" "--force" "--name" "emulator" "--device" "pixel" "--package" "system-images;android-28;google_apis;x86_64" "--tag" "google_apis" "--abi" "x86_64" "--sdcard" "512M"
+
+
+            adb kill-server
+            adb start-server
+
+            /usr/local/share/android-sdk/emulator/emulator "@emulator" "-verbose" "-show-kernel" "-no-audio" "-no-boot-anim" "-netdelay" "none" "-no-snapshot" "-wipe-data" "-gpu" "swiftshader_indirect" "-camera-back" "none" "-camera-front" "none"
+    - wait-for-android-emulator@1:
+        inputs:
+        - boot_timeout: '600'
+    meta:
+      bitrise.io:
+        stack: osx-xcode-13.4.x
+        machine_type_id: g2.12core
+  netrc-optional:
+    steps:
+    - script@1:
+        inputs:
+        - content: |
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+
+            echo "machine github.com" >> ~/.netrc
+            echo "    login atanas-bitrise" >> ~/.netrc
+            echo "    password x-oauth-basic" >> ~/.netrc
+
+
+
+            /usr/bin/curl -f -L -o file.zip https://raw.githubusercontent.com/nielsendigitalsdk/nielsenappsdk-ios-dynamic/master/iOS/GlobalNoAd/NielsenNoAdAppSDK-8.1.0.0.zip --create-dirs --netrc-optional --retry 2 -A 'CocoaPods/1.10.2 cocoapods-downloader/1.5.1'
+    meta:
+      bitrise.io:
+        stack: osx-xcode-13.1.x
+        machine_type_id: g2.4core
+  node:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            which node
+            node --version
+        title: "$CUSTOM_MESSAGE"
+    - nvm@1:
+        inputs:
+        - node_version: 6.3.1
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            which node
+            node --version
+    - restore-cache@1:
+        inputs:
+        - verbose: 'true'
+        - key: nvm
+    - nvm@1:
+        inputs:
+        - node_version: 16.19.1
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            which node
+            node --version
+
+            ls /Users/vagrant/
+            ls /Users/vagrant/.nvm/
+            ls /Users/vagrant/.nvm/.cache/
+
+            ls /Users/vagrant/.nvm/.cache/bin/node-v16.19.1-darwin-arm64
+            ls /root/.nvm/.cache/bin
+            ls /root/.nvm/.cache/bin/node-v16.19.1-linux-x64/node-v16.19.1-linux-x64.tar.xz
+    - save-cache@1:
+        inputs:
+        - paths: "/root/.nvm/.cache/bin/node-v16.19.1-linux-x64/node-v16.19.1-linux-x64.tar.xz"
+        - verbose: 'true'
+        - is_key_unique: 'true'
+        - key: nvm
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.2.x-ventura
+        machine_type_id: g2-m1.8core
+  npm-install:
+    steps:
+    - activate-ssh-key@4: {}
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - content: |
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            # GIT_SSH_COMMAND='ssh -i /Users/vagrant/.ssh/bitrise_step_activate_ssh_key' npm install git+ssh://git@github.com:atanas-bitrise/npm-package.git
+            # sudo chown root .
+
+            node --version
+            npm --version
+
+            npm install git+ssh://git@github.com:atanas-bitrise/another-package.git
+            # npm run @atanas-bitrise/another-package whoami
+    meta:
+      bitrise.io:
+        stack: osx-xcode-13.2.x
+        machine_type_id: g2.4core
+  primary:
+    steps:
+    - activate-ssh-key@4:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@6:
+        is_always_run: true
+    - script@1:
+        title: Do anything with Script step
+    - deploy-to-bitrise-io@2: {}
+  primary-benchmark:
+    before_run:
+    - primary
+    meta:
+      bitrise.io:
+        stack: osx-xcode-13.4.x
+        machine_type_id: g2.4core
+  python:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            which python
+            python --version
+            which python3
+            python3 --version
+            which pip
+            pip --version
+            which pip3
+            pip3 --version
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.0.x
+        machine_type_id: g2.12core
+  ruby-dev:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            gem "install" "bundler" "--no-document" "-v" "2.3.18" "--force"
+
+            which ruby
+            ls -l /Users/vagrant/.rbenv/shims/ruby
+            ruby --version
+            echo $PATH
+            which rbenv
+            ls /usr/local/bin
+            ls /usr/local/bin/rbenv
+            cat /Users/vagrant/.rbenv/shims/ruby
+
+
+            # ls /opt
+            # ls /opt/homebrew
+            # ls /opt/homebrew/Cellar
+            # ls /opt/homebrew/Cellar/rbenv
+            # ls /opt/homebrew/Cellar/rbenv/1.2.0
+            ls /opt/homebrew/Cellar/rbenv/1.2.0/libexec
+
+            echo "-------"
+            cat /opt/homebrew/Cellar/rbenv/1.2.0/libexec/rbenv-exec
+            echo "-------"
+
+            /opt/homebrew/Cellar/rbenv/1.2.0/libexec/rbenv-exec
+
+            # sudo xcode-select --install
+            # sudo xcodebuild -license
+
+            gem install bundler -v 2.3.18 --no-document --force
+
+            echo 'source "https://rubygems.org"' >> Gemfile
+            echo "gem 'json', '2.6.2'" >> Gemfile
+            cat Gemfile
+            bundle install
+            # gem install json -v 2.6.2
+
+            # write your script here
+            ls /Users/vagrant/.rbenv
+            ls /Users/vagrant/.rbenv/versions
+            ls /Users/vagrant/.rbenv/versions/3.1.0
+            ls /Users/vagrant/.rbenv/versions/3.1.0/lib
+            ls /Users/vagrant/.rbenv/versions/3.1.0/lib/ruby
+            ls /Users/vagrant/.rbenv/versions/3.1.0/lib/ruby/3.1.0
+            ls /Users/vagrant/.rbenv/versions/3.1.0/lib/ruby/include
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.1.x-ventura
+        machine_type_id: g2-m1.8core
+  script-checker:
+    steps:
+    - script@1:
+        inputs:
+        - is_debug: 'yes'
+        - content: |
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            echo '#!/bin/bash' >> script.sh
+            echo 'set -e' >> script.sh
+            echo 'ADB=${ANDROID_HOME}/platform-tools/adb' >> script.sh
+            echo 'devices=(`${ADB} devices | sed "1 d" | cut -f 1`)' >> script.sh
+            echo 'echo $devices' >> script.sh
+
+            chmod 755 script.sh
+
+            ./script.sh
+    meta:
+      bitrise.io:
+        stack: linux-docker-android-20.04
+        machine_type_id: standard
+  setting-time:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            defaults write com.apple.universalaccess reduceTransparency -bool true
+            # sudo date 0803202322
+            sleep 300
+    meta: 
+    bitrise.io:
+      stack: "$VARIABLE"
+      machine_type_id: g2.4core
+    envs:
+    - VARIABLE: osx-xcode-13.4.x
+  simple-git-clone:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            git clone $GIT_REPOSITORY_URL
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+  start-emulator:
+    steps:
+    - git::https://github.com/atanas-bitrise/steps-avd-manager.git@visibility:
+        inputs:
+        - emulator_channel: '0'
+        - abi: x86_64
+        - api_level: '28'
+    - wait-for-android-emulator@1:
+        inputs:
+        - boot_timeout: '600'
+    meta:
+      bitrise.io:
+        stack: osx-xcode-13.4.x
+        machine_type_id: g2.12core
+  steps:
+    steps:
+    - build-router-start@0: {}
+  xamarin-tooling:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            brew update
+            brew tap homebrew/cask-versions
+            brew install --cask mono-mdk-for-visual-studio
+            brew install --cask xamarin-ios
+            brew install --cask xamarin-android
+  xcparse:
+    steps:
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            ls /Applications
+            which xcodebuild
+
+            # write your script here
+            brew --version
+            xcodebuild -version
+
+            # sudo xcode-select -s /Applications/Xcode-14.1.0.app
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - xcparse@0: {}
+    - script@1:
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            brew install chargepoint/xcparse/xcparse
+
+            # sudo xcode-select -s /Applications/Xcode-14.0.1.app
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    - script@1:
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # make pipelines' return status equal the last command to exit with a non-zero status, or zero if all commands exit successfully
+            set -o pipefail
+            # debug log
+            set -x
+
+            # write your script here
+            ENV
+
+            # or run a script from your repository, like:
+            # bash ./path/to/script.sh
+            # not just bash, e.g.:
+            # ruby ./path/to/script.rb
+    meta:
+      bitrise.io:
+        stack: osx-xcode-14.0.x-ventura
+        machine_type_id: g2.4core
+meta:
+  bitrise.io:
+    stack: osx-xcode-14.0.x-ventura
+    machine_type_id: g2.4core
+app:
+  envs:
+  - RUBY_VERSION: 3.1.0
+  - opts:
+      is_expand: false
+    HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+  - opts:
+      is_expand: false
+    CUSTOM_MESSAGE: My custom message

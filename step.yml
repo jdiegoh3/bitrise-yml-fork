@@ -1,0 +1,16 @@
+title: Import common bitrise.yml
+summary: Insert the yml file stored in the Step into the Virtual Machine
+description: |-
+  After the main bitrise.yml file is installed, the workflows can be run with the Bitrise cli.
+
+website: https://github.com/atanas-bitrise/bitrise-yml
+source_code_url: https://github.com/atanas-bitrise/bitrise-yml
+support_url: https://github.com/atanas-bitrise/bitrise-yml/issues
+type_tags:
+is_requires_admin_user: true
+is_always_run: false
+is_skippable: true
+deps:
+run_if: ""
+inputs:
+outputs:
