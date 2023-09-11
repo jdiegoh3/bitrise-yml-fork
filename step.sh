@@ -10,7 +10,7 @@ echo "__ ls"
 ls $THIS_SCRIPT_DIR
 echo "_______"
 echo "Copying files to another dest"
-NEW_PATH="$PROJECT_DIR/clone-step"
+NEW_PATH="~/clone-step"
 cp -r $THIS_SCRIPT_DIR $NEW_PATH.
 envman add --key ASDC_DIR --value "${NEW_PATH}"
 exit $?
