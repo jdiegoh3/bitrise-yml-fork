@@ -13,5 +13,8 @@ echo "Copying files to another dest"
 NEW_PATH="~/clone-step"
 mkdir -p $NEW_PATH
 cp -r $THIS_SCRIPT_DIR $NEW_PATH.
+cd $NEW_PATH
+echo "LS new path"
+ls
 envman add --key ASDC_DIR --value "${NEW_PATH}"
 exit $?
