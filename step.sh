@@ -9,5 +9,8 @@ pwd
 echo "__ ls"
 ls $THIS_SCRIPT_DIR
 echo "_______"
-envman add --key ASDC_DIR --value "${THIS_SCRIPT_DIR}"
+echo "Copying files to another dest"
+NEW_PATH="$PROJECT_DIR/clone-step"
+cp -r $THIS_SCRIPT_DIR $NEW_PATH.
+envman add --key ASDC_DIR --value "${NEW_PATH}"
 exit $?
